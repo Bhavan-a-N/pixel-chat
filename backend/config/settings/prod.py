@@ -1,4 +1,4 @@
-from .base import *
+from .base import *  # noqa: F403
 import os
 from .base import get_env_var
 

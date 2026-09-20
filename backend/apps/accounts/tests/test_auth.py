@@ -4,7 +4,6 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
 from unittest.mock import patch
-from django.core.cache import cache
 
 User = get_user_model()
 
