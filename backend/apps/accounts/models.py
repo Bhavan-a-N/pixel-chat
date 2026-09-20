@@ -1,8 +1,13 @@
 import uuid
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    PermissionsMixin,
+    BaseUserManager,
+)
 from django.core.validators import RegexValidator, MinLengthValidator
 from django.db.models.functions import Lower
+
 
 class UserManager(BaseUserManager):
     def create_user(self, email, username, password=None, **extra_fields):
@@ -10,7 +15,7 @@ class UserManager(BaseUserManager):
             raise ValueError("The Email field must be set")
         if not username:
             raise ValueError("The Username field must be set")
-            
+
         email = self.normalize_email(email).lower()
         user = self.model(email=email, username=username, **extra_fields)
         if password:
@@ -31,44 +36,48 @@ class UserManager(BaseUserManager):
 
         return self.create_user(email, username, password, **extra_fields)
 
+
 class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
+
     email = models.EmailField(unique=True)
-    
+
     username = models.CharField(
         max_length=20,
         unique=True,
         validators=[
             MinLengthValidator(3),
-            RegexValidator(r'^[a-zA-Z0-9_]+$', 'Only letters, numbers, and underscores are allowed.')
-        ]
+            RegexValidator(
+                r"^[a-zA-Z0-9_]+$",
+                "Only letters, numbers, and underscores are allowed.",
+            ),
+        ],
     )
-    
+
     display_name = models.CharField(max_length=100, blank=True)
     avatar_seed = models.CharField(max_length=100)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
-    
+
     objects = UserManager()
-    
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username']
-    
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["username"]
+
     class Meta:
         constraints = [
-            models.UniqueConstraint(Lower('email'), name='unique_email_ci'),
-            models.UniqueConstraint(Lower('username'), name='unique_username_ci'),
+            models.UniqueConstraint(Lower("email"), name="unique_email_ci"),
+            models.UniqueConstraint(Lower("username"), name="unique_username_ci"),
         ]
-        
+
     def save(self, *args, **kwargs):
         if self.email:
             self.email = self.email.lower()
         super().save(*args, **kwargs)
-        
+
     def __str__(self):
         return self.username

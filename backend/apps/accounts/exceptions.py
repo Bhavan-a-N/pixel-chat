@@ -1,5 +1,6 @@
 from rest_framework.views import exception_handler
 
+
 def custom_exception_handler(exc, context):
     response = exception_handler(exc, context)
 
@@ -7,13 +8,15 @@ def custom_exception_handler(exc, context):
         custom_data = {
             "error": {
                 "code": response.status_code,
-                "message": getattr(response, 'status_text', exc.__class__.__name__),
-                "details": response.data
+                "message": getattr(response, "status_text", exc.__class__.__name__),
+                "details": response.data,
             }
         }
-        
+
         # Consistent generic message for login failure to prevent enumeration
-        if response.status_code == 401 and "No active account found" in str(response.data):
+        if response.status_code == 401 and "No active account found" in str(
+            response.data
+        ):
             custom_data["error"]["message"] = "Authentication Failed"
             custom_data["error"]["details"] = {"detail": "Invalid credentials."}
 

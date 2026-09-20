@@ -1,6 +1,7 @@
 import json
 import logging
 
+
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
@@ -11,5 +12,5 @@ class JsonFormatter(logging.Formatter):
         }
         if record.exc_info:
             log_record["exc_info"] = self.formatException(record.exc_info)
-            
+
         return json.dumps(log_record)

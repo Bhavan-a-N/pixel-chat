@@ -25,6 +25,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - uses: actions/checkout@v4
     
@@ -52,6 +62,7 @@ jobs:
         DB_USER: postgres
         DB_PASSWORD: postgres
         DB_NAME: pixelchat
+        REDIS_URL: redis://localhost:6379/0
       run: |
         cd backend
         python manage.py makemigrations --check --dry-run
@@ -64,6 +75,7 @@ jobs:
         DB_USER: postgres
         DB_PASSWORD: postgres
         DB_NAME: pixelchat
+        REDIS_URL: redis://localhost:6379/0
         DJANGO_SETTINGS_MODULE: config.settings.dev
       run: |
         cd backend

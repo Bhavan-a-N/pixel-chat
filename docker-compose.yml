@@ -1,38 +1,31 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
+      POSTGRES_DB: ${DB_NAME:-postgres}
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-pixelchat}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  backend:
-    build:
-      context: ./backend
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "127.0.0.1:8000:8000"
-    volumes:
-      - ./backend:/app
-    environment:
-      - DJANGO_SETTINGS_MODULE=config.settings.dev
-      - DB_HOST=db
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - DB_NAME=${DB_NAME:-pixelchat}
-    depends_on:
-      db:
-        condition: service_healthy
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

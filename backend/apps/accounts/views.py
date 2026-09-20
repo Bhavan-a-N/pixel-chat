@@ -9,15 +9,18 @@ from .serializers import RegisterSerializer, UserSerializer
 
 User = get_user_model()
 
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
-    throttle_scope = 'register'
+    throttle_scope = "register"
+
 
 class LoginView(TokenObtainPairView):
     permission_classes = [permissions.AllowAny]
-    throttle_scope = 'login'
+    throttle_scope = "login"
+
 
 class LogoutView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -31,34 +34,39 @@ class LogoutView(views.APIView):
         except Exception:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
+
 class UserMeView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         return self.request.user
-        
+
     def perform_update(self, serializer):
         # Ensure only display_name is updated
-        allowed_keys = {'display_name'}
+        allowed_keys = {"display_name"}
         update_keys = set(self.request.data.keys())
         if not update_keys.issubset(allowed_keys):
-            pass # Ignoring other fields is handled by serializer fields, but we can explicitly restrict
+            pass  # Ignoring other fields is handled by serializer fields, but we can explicitly restrict
         serializer.save()
+
 
 class UserSearchView(generics.ListAPIView):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
-    throttle_scope = 'search'
+    throttle_scope = "search"
 
     def get_queryset(self):
-        query = self.request.query_params.get('username', '').strip()
+        query = self.request.query_params.get("username", "").strip()
         if len(query) < 2:
             return User.objects.none()
-            
-        return User.objects.filter(
-            username__istartswith=query
-        ).exclude(id=self.request.user.id).order_by('username')[:20]
+
+        return (
+            User.objects.filter(username__istartswith=query)
+            .exclude(id=self.request.user.id)
+            .order_by("username")[:20]
+        )
+
 
 class HealthCheckView(views.APIView):
     permission_classes = [permissions.AllowAny]
@@ -72,4 +80,7 @@ class HealthCheckView(views.APIView):
                     return Response({"status": "ok"})
         except Exception:
             pass
-        return Response({"status": "error", "message": "Database unavailable"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(
+            {"status": "error", "message": "Database unavailable"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )

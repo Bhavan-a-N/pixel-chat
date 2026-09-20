@@ -1,0 +1,25 @@
+name: pixel_chat
+description: "Pixel Chat Flutter Application"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: 1.0.8
+  flutter_riverpod: 3.3.2
+  go_router: 17.5.0
+  dio: 5.11.1
+  flutter_secure_storage: 11.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 6.0.0
+  mocktail: 1.0.5
+
+flutter:
+  uses-material-design: true
