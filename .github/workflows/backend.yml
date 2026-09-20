@@ -1,0 +1,70 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pixelchat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+
+    - name: Lint with ruff
+      run: |
+        ruff check backend/
+        ruff format --check backend/
+
+    - name: Check missing migrations
+      env:
+        SECRET_KEY: test-key-for-ci-only
+        INVITE_CODE: test-invite-code
+        DB_HOST: localhost
+        DB_USER: postgres
+        DB_PASSWORD: postgres
+        DB_NAME: pixelchat
+      run: |
+        cd backend
+        python manage.py makemigrations --check --dry-run
+
+    - name: Run tests
+      env:
+        SECRET_KEY: test-key-for-ci-only
+        INVITE_CODE: test-invite-code
+        DB_HOST: localhost
+        DB_USER: postgres
+        DB_PASSWORD: postgres
+        DB_NAME: pixelchat
+        DJANGO_SETTINGS_MODULE: config.settings.dev
+      run: |
+        cd backend
+        pytest
