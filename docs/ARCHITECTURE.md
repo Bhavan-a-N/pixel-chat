@@ -26,21 +26,21 @@ flowchart TD
 
 Designed to be group-ready without future rewrites.
 
-*   **User**: `id` (UUID), `username` (String, Unique), `email` (String, Unique), `password_hash`, `avatar_seed`, `created_at`, `updated_at`.
-*   **Conversation**: `id` (UUID), `type` (Enum: `dm`, `group`), `next_seq` (Integer, default 1), `created_at`.
-*   **Membership**: `id` (UUID), `user_id` (FK User), `conversation_id` (FK Conversation), `role` (Enum: `admin`, `member`), `last_delivered_seq` (Integer, default 0), `last_read_seq` (Integer, default 0), `created_at`.
+*   **User**: `id` (UUIDv4), `username` (String, Unique), `email` (String, Unique), `password_hash`, `avatar_seed`, `created_at`, `updated_at`.
+*   **Conversation**: `id` (UUIDv4), `type` (Enum: `dm`, `group`), `next_seq` (Integer, default 1), `created_at`.
+*   **Membership**: `id` (UUIDv4), `user_id` (FK User), `conversation_id` (FK Conversation), `role` (Enum: `admin`, `member`), `last_delivered_seq` (Integer, default 0), `last_read_seq` (Integer, default 0), `created_at`.
     *   *Indexes*: `(user_id, conversation_id)` unique constraint.
-*   **Message**: `id` (UUID), `conversation_id` (FK Conversation), `seq` (Integer), `sender_id` (FK User), `content` (Text), `client_id` (String), `created_at`.
+*   **Message**: `id` (UUIDv4), `conversation_id` (FK Conversation), `seq` (Integer), `sender_id` (FK User), `content` (Text), `client_id` (String), `created_at`.
     *   *Indexes*: `(conversation_id, seq)` unique index for fast, ordered pagination.
-    *   *Constraint*: `(sender_id, client_id)` unique to enforce idempotency.
-    *   *Seq Assignment*: `seq` is assigned safely under concurrent sends by incrementing the `next_seq` counter on the parent `Conversation` within the same database transaction (e.g., locking the conversation row via `SELECT ... FOR UPDATE` before inserting the message).
+    *   *Constraint*: `(sender_id, client_id)` unique to enforce idempotency. Sending a message with an already-used `client_id` must return the existing message and must NOT consume a new `seq`.
+    *   *Seq Assignment*: `seq` is assigned safely under concurrent sends by incrementing the `next_seq` counter on the parent `Conversation` within the same database transaction (e.g., locking the conversation row via `SELECT ... FOR UPDATE` before inserting the message). Ordering relies strictly on this `seq`, never on the UUID.
 
 *Note on Read/Delivered State*: By keeping `last_delivered_seq` and `last_read_seq` pointers per user per conversation in the `Membership` table, we avoid the unbounded row growth of a per-message tracking table and maintain strict monotonic ordering.
 
 ## 3. WebSocket Protocol
 
 A single, versioned JSON envelope is used over the WebSocket connection. 
-*   **Authentication**: Passed in standard HTTP headers during the initial WebSocket handshake (`Authorization: Bearer <JWT>`).
+*   **Authentication**: Passed in standard HTTP headers during the initial WebSocket handshake (`Authorization: Bearer <JWT>`). The token is validated at connect only. If expired, the server closes the connection with code `4401`, prompting the client to refresh via REST and reconnect. *Fallback*: A first-message auth event is supported if an intermediate host proxy strips headers.
 
 **Envelope Format:**
 ```json
@@ -58,7 +58,7 @@ A single, versioned JSON envelope is used over the WebSocket connection.
 *   `chat.ack` (Server -> Client): Acknowledges `chat.send`. Payload contains `status: "delivered"` or `"error"`.
 *   `chat.delivered` (Client -> Server): Updates the `last_delivered_seq` pointer.
 *   `chat.read` (Client -> Server): Updates the `last_read_seq` pointer.
-*   `chat.typing` (Bi-directional): Indicates typing status. Payload: `{ "conversation_id": "...", "is_typing": true }`.
+*   `chat.typing` (Bi-directional): Indicates typing status. Payload: `{ "conversation_id": "...", "is_typing": true }`. *Note: strictly ephemeral, WebSocket-only, never persisted, and never sent via FCM.*
 *   `presence.update` (Server -> Client): Notifies when a user comes online/offline.
 *   `error` (Server -> Client): Payload contains error details.
 
@@ -100,8 +100,8 @@ Redis is treated as strictly ephemeral. It is never used as primary storage.
 *   **Presence Tracking**: 
     *   Key: `presence:user:<user_id>` (String).
     *   Value: `1`
-    *   TTL: 60 seconds.
-    *   The WebSocket connection sends a heartbeat ping every 30 seconds to refresh the TTL. If the TTL expires, the user is considered offline.
+    *   TTL: ~60-90 seconds.
+    *   A foregrounded client sends a heartbeat ping every 30s to refresh the TTL. The server also enforces an immediate offline status upon a TCP WebSocket disconnect. Heartbeats stop when the app is backgrounded.
 
 ## 7. Push Decision Logic (FCM)
 
@@ -109,7 +109,6 @@ To avoid sending unnecessary notifications while the user is actively chatting:
 1.  When a message is successfully saved to the database, the server checks the Redis presence key for all other conversation members.
 2.  If `presence:user:<user_id>` exists, the server relies on the WebSocket `chat.receive` event and **skips** FCM.
 3.  If the presence key is missing (user is offline or backgrounded), the server fires an FCM push notification.
-4.  Typing indicators never trigger FCM pushes.
 
 ## 8. Free-Tier Limits & Cold-Start Behavior
 
@@ -128,9 +127,3 @@ Moving to production requires **no code changes**, only environment variable upd
     *   Managed PostgreSQL (e.g., AWS RDS, Neon Pro) with daily automated backups and read replicas.
     *   Managed Redis (e.g., Elasticache) within a private VPC.
     *   *Change required*: Update `DATABASE_URL` and `REDIS_URL` in the environment variables.
-
-## 10. Open Questions & Tradeoffs
-
-*   **Tradeoff: Polling vs. WebSockets for Presence**: We chose a 30s heartbeat over WebSockets to maintain presence in Redis. This uses slightly more battery/bandwidth than purely relying on TCP disconnect events, but guarantees accurate presence even if a connection drops ungracefully (e.g., cell tower switch).
-*   **Tradeoff: UUIDs vs. BigInt IDs**: We will use UUIDv4 for all primary keys. It consumes more storage and memory than sequential integers, but it prevents ID enumeration, simplifies client-side ID generation (crucial for idempotency), and makes database merges easier.
-*   **Open Question**: Should we implement a "soft delete" for the future message deletion feature, or hard delete? *(Recommendation: Hard delete to comply with privacy expectations and save DB space, given our deferred retention policy).*
