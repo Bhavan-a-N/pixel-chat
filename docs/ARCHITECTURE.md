@@ -26,21 +26,23 @@ flowchart TD
 
 Designed to be group-ready without future rewrites.
 
-*   **User**: `id` (UUIDv4), `username` (String, Unique), `email` (String, Unique), `password_hash`, `avatar_seed`, `created_at`, `updated_at`.
-*   **Conversation**: `id` (UUIDv4), `type` (Enum: `dm`, `group`), `next_seq` (Integer, default 1), `created_at`.
-*   **Membership**: `id` (UUIDv4), `user_id` (FK User), `conversation_id` (FK Conversation), `role` (Enum: `admin`, `member`), `last_delivered_seq` (Integer, default 0), `last_read_seq` (Integer, default 0), `created_at`.
+*   **User**: `id` (UUIDv4), `username` (String, Unique), `email` (String, Unique), `display_name` (String), `password_hash`, `avatar_seed`, `created_at`, `updated_at`.
+*   **Conversation**: `id` (UUIDv4), `type` (Enum: `dm`, `group`), `name` (String, nullable for DMs, 1-50 chars for groups), `dm_key` (String, nullable for groups, unique format `<sorted_uuid1>:<sorted_uuid2>` for DMs), `next_seq` (Integer, default 1), `created_at`, `updated_at`.
+    *   *Check Constraints*: `check_group_has_name` (group requires name), `check_dm_has_dm_key` (dm requires dm_key).
+*   **Membership**: `id` (UUIDv4), `user_id` (FK User), `conversation_id` (FK Conversation), `role` (Enum: `admin`, `member`), `joined_at_seq` (Integer, default 0), `last_delivered_seq` (Integer, default 0), `last_read_seq` (Integer, default 0), `created_at`, `updated_at`.
     *   *Indexes*: `(user_id, conversation_id)` unique constraint.
-*   **Message**: `id` (UUIDv4), `conversation_id` (FK Conversation), `seq` (Integer), `sender_id` (FK User), `content` (Text), `client_id` (String), `created_at`.
+*   **Message**: `id` (UUIDv4), `conversation_id` (FK Conversation), `seq` (Integer), `sender_id` (FK User), `body` (Text), `client_id` (String), `is_system` (Boolean, default False), `system_data` (JSON, nullable), `created_at`.
     *   *Indexes*: `(conversation_id, seq)` unique index for fast, ordered pagination.
-    *   *Constraint*: `(sender_id, client_id)` unique to enforce idempotency. Sending a message with an already-used `client_id` must return the existing message and must NOT consume a new `seq`.
-    *   *Seq Assignment*: `seq` is assigned safely under concurrent sends by incrementing the `next_seq` counter on the parent `Conversation` within the same database transaction (e.g., locking the conversation row via `SELECT ... FOR UPDATE` before inserting the message). Ordering relies strictly on this `seq`, never on the UUID.
+    *   *Constraint*: `(sender_id, client_id)` unique to enforce idempotency. Sending a message with an already-used `client_id` returns the existing message without consuming a new `seq`.
+    *   *Seq Assignment*: `seq` is assigned safely under concurrent sends by incrementing the `next_seq` counter on the parent `Conversation` within the same database transaction (locking the conversation row via `SELECT ... FOR UPDATE` before inserting the message).
+    *   *Payload Invariant*: Every message payload includes `sender_display_name` and `sender_avatar_seed` so ex-members' history displays correctly without runtime membership lookups.
 
-*Note on Read/Delivered State*: By keeping `last_delivered_seq` and `last_read_seq` pointers per user per conversation in the `Membership` table, we avoid the unbounded row growth of a per-message tracking table and maintain strict monotonic ordering.
+*Note on Read/Delivered State*: Monotonic sequence pointers `last_delivered_seq` and `last_read_seq` per member per conversation avoid per-message tracking tables and maintain strict monotonic ordering.
 
 ## 3. WebSocket Protocol
 
 A single, versioned JSON envelope is used over the WebSocket connection. 
-*   **Authentication**: Passed in standard HTTP headers during the initial WebSocket handshake (`Authorization: Bearer <JWT>`). The token is validated at connect only. If expired, the server closes the connection with code `4401`, prompting the client to refresh via REST and reconnect. *Fallback*: A first-message auth event is supported if an intermediate host proxy strips headers.
+*   **Authentication**: Passed in standard HTTP headers during the initial WebSocket handshake (`Authorization: Bearer <JWT>`). The token is validated at connect only. If expired, the server closes the connection with code `4401`, prompting the client to refresh via REST and reconnect.
 
 **Envelope Format:**
 ```json
@@ -55,12 +57,16 @@ A single, versioned JSON envelope is used over the WebSocket connection.
 **Event Types:**
 *   `chat.send` (Client -> Server): Send a new message.
 *   `chat.receive` (Server -> Client): New message delivered to recipient.
-*   `chat.ack` (Server -> Client): Acknowledges `chat.send`. Payload contains `status: "delivered"` or `"error"`.
+*   `chat.ack` (Server -> Client): Acknowledges `chat.send`. Payload contains `seq` and `status: "sent"`.
 *   `chat.delivered` (Client -> Server): Updates the `last_delivered_seq` pointer.
 *   `chat.read` (Client -> Server): Updates the `last_read_seq` pointer.
-*   `chat.typing` (Bi-directional): Indicates typing status. Payload: `{ "conversation_id": "...", "is_typing": true }`. *Note: strictly ephemeral, WebSocket-only, never persisted, and never sent via FCM.*
-*   `presence.update` (Server -> Client): Notifies when a user comes online/offline.
-*   `error` (Server -> Client): Payload contains error details.
+*   `chat.status` (Server -> Client): Broadcasts pointer updates to members.
+*   `chat.typing` (Bi-directional): Ephemeral typing status broadcast to all other members in the conversation. Payload: `{ "conversation_id": "...", "user_id": "...", "username": "...", "display_name": "...", "is_typing": true }`.
+*   `membership.added` (Server -> Client): Broadcast when members are added to a group.
+*   `membership.removed` (Server -> Client): Broadcast when a member leaves or is removed from a group.
+*   `membership.updated` (Server -> Client): Broadcast when a member's role is updated (promoted/demoted).
+*   `conversation.updated` (Server -> Client): Broadcast when a conversation's name is updated.
+*   `error` (Server -> Client): Payload contains error `code` and `message`.
 
 ## 4. Message Lifecycle
 

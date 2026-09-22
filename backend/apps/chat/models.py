@@ -21,6 +21,7 @@ class Conversation(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default=TYPE_DM)
+    name = models.CharField(max_length=50, null=True, blank=True)
     next_seq = models.IntegerField(default=1)
     dm_key = models.CharField(max_length=73, null=True, blank=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -28,9 +29,21 @@ class Conversation(models.Model):
 
     class Meta:
         ordering = ["-updated_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(type="group", name__isnull=False)
+                | models.Q(type="dm"),
+                name="check_group_has_name",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(type="dm", dm_key__isnull=False)
+                | models.Q(type="group"),
+                name="check_dm_has_dm_key",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"Conversation({self.id}, type={self.type}, seq={self.next_seq})"
+        return f"Conversation({self.id}, type={self.type}, name={self.name}, seq={self.next_seq})"
 
 
 class Membership(models.Model):
@@ -53,6 +66,7 @@ class Membership(models.Model):
         related_name="chat_memberships",
     )
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default=ROLE_MEMBER)
+    joined_at_seq = models.IntegerField(default=0)
     last_delivered_seq = models.IntegerField(default=0)
     last_read_seq = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -66,7 +80,7 @@ class Membership(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"Membership(user={self.user_id}, conv={self.conversation_id}, role={self.role})"
+        return f"Membership(user={self.user_id}, conv={self.conversation_id}, role={self.role}, joined_seq={self.joined_at_seq})"
 
 
 class Message(models.Model):
@@ -84,6 +98,8 @@ class Message(models.Model):
     seq = models.IntegerField()
     body = models.TextField(validators=[validate_message_body])
     client_id = models.CharField(max_length=64)
+    is_system = models.BooleanField(default=False)
+    system_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -103,4 +119,4 @@ class Message(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"Message({self.id}, conv={self.conversation_id}, seq={self.seq}, sender={self.sender_id})"
+        return f"Message({self.id}, conv={self.conversation_id}, seq={self.seq}, sender={self.sender_id}, sys={self.is_system})"

@@ -46,6 +46,10 @@ class TestChatRestApi:
         data1 = res1.data
         assert data1["other_participant"]["username"] == "bob"
         assert data1["last_seq"] == 0
+        assert "memberships" in data1
+        assert len(data1["memberships"]) == 2
+        assert data1["other_delivered_seq"] == 0
+        assert data1["other_read_seq"] == 0
 
         # Idempotent re-creation (case-insensitive)
         res2 = self.client1.post(url, {"username": "BOB"})
@@ -89,6 +93,9 @@ class TestChatRestApi:
         ), f"Query count grew from {count1} to {count2} with more conversations/messages"
         conv2.refresh_from_db()
         assert res2.data[0]["last_seq"] == conv2.next_seq - 1
+        assert "memberships" in res2.data[0]
+        assert "other_delivered_seq" in res2.data[0]
+        assert "other_read_seq" in res2.data[0]
 
     def test_messages_pagination_and_membership_check(self):
         conv, _ = get_or_create_dm(self.user1, self.user2)

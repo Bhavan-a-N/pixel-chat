@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/env.dart';
 import '../storage/token_storage.dart';
 import 'auth_interceptor.dart';
+import 'token_refresher.dart';
 import '../../features/auth/data/auth_repository.dart';
 
 final tokenStorageProvider = Provider<TokenStorage>((ref) {
@@ -39,9 +40,23 @@ final refreshDioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
+final tokenRefresherProvider = Provider<TokenRefresher>((ref) {
+  final tokenStorage = ref.watch(tokenStorageProvider);
+  final refreshDio = ref.watch(refreshDioProvider);
+  return TokenRefresher(
+    tokenStorage: tokenStorage,
+    refreshDio: refreshDio,
+    onSessionExpired: () {
+      final callback = ref.read(onSessionExpiredProvider);
+      callback?.call();
+    },
+  );
+});
+
 final mainDioProvider = Provider<Dio>((ref) {
   final tokenStorage = ref.watch(tokenStorageProvider);
   final refreshDio = ref.watch(refreshDioProvider);
+  final tokenRefresher = ref.watch(tokenRefresherProvider);
 
   final dio = Dio(
     BaseOptions(
@@ -61,6 +76,7 @@ final mainDioProvider = Provider<Dio>((ref) {
       tokenStorage: tokenStorage,
       refreshDio: refreshDio,
       mainDio: dio,
+      tokenRefresher: tokenRefresher,
       onSessionExpired: () {
         final callback = ref.read(onSessionExpiredProvider);
         callback?.call();

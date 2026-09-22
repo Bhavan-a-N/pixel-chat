@@ -9,8 +9,9 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 
+from channels.db import database_sync_to_async
 from apps.chat.models import Message
-from apps.chat.services import get_or_create_dm, send_message
+from apps.chat.services import get_or_create_dm, send_message, update_membership_pointer
 from config.asgi import application
 
 User = get_user_model()
@@ -126,6 +127,18 @@ class TestWebSocketMessaging:
         self.token1 = get_token_for_user(self.user1)
         self.token2 = get_token_for_user(self.user2)
         self.token3 = get_token_for_user(self.user3)
+
+    async def create_authenticated_communicator(
+        self, token: str
+    ) -> WebsocketCommunicator:
+        comm = WebsocketCommunicator(
+            application,
+            "/ws/chat/",
+            headers=[(b"authorization", f"Bearer {token}".encode("utf-8"))],
+        )
+        connected, _ = await comm.connect()
+        assert connected is True
+        return comm
 
     async def test_send_ack_and_broadcast_receive(self):
         conv, _ = get_or_create_dm(self.user1, self.user2)
@@ -493,4 +506,163 @@ class TestWebSocketMessaging:
         assert err_rate["payload"]["code"] == 429
 
         # Connection stays open
+        await comm.disconnect()
+
+    async def test_delivered_and_read_status_ack_and_broadcast(self):
+        token1 = get_token_for_user(self.user1)
+        token2 = get_token_for_user(self.user2)
+
+        comm1 = await self.create_authenticated_communicator(token1)
+        comm2 = await self.create_authenticated_communicator(token2)
+
+        conv, _ = get_or_create_dm(self.user1, self.user2)
+
+        # Alice sends message (seq 1)
+        await comm1.send_json_to(
+            {
+                "v": 1,
+                "type": "chat.send",
+                "client_id": "alice-msg-1",
+                "payload": {"conversation_id": str(conv.id), "body": "Hello Bob"},
+            }
+        )
+        await comm1.receive_json_from()  # consume alice ack
+        await comm1.receive_json_from()  # consume alice broadcast
+
+        # Bob receives message
+        bob_rcv = await comm2.receive_json_from()
+        assert bob_rcv["type"] == "chat.receive"
+        assert bob_rcv["payload"]["seq"] == 1
+
+        # Bob sends chat.delivered for seq 1
+        await comm2.send_json_to(
+            {
+                "v": 1,
+                "type": "chat.delivered",
+                "client_id": "bob-del-1",
+                "payload": {"conversation_id": str(conv.id), "seq": 1},
+            }
+        )
+
+        # Both Alice and Bob (including other devices of Bob) get chat.status broadcast
+        alice_status = await comm1.receive_json_from()
+        assert alice_status["type"] == "chat.status"
+        assert alice_status["payload"]["conversation_id"] == str(conv.id)
+        assert alice_status["payload"]["user_id"] == str(self.user2.id)
+        assert alice_status["payload"]["delivered_seq"] == 1
+        assert alice_status["payload"]["read_seq"] == 0
+
+        bob_status = await comm2.receive_json_from()
+        assert bob_status["type"] == "chat.status"
+        assert bob_status["payload"]["delivered_seq"] == 1
+
+        # Stale ack: Bob sends chat.delivered again for seq 1 -> zero rows updated, NO broadcast
+        await comm2.send_json_to(
+            {
+                "v": 1,
+                "type": "chat.delivered",
+                "client_id": "bob-del-repeat",
+                "payload": {"conversation_id": str(conv.id), "seq": 1},
+            }
+        )
+        # Verify no broadcast received by Alice
+        assert await comm1.receive_nothing(timeout=0.2) is True
+
+        # Bob sends chat.read for seq 1 -> delivered raised to at least 1, read becomes 1
+        await comm2.send_json_to(
+            {
+                "v": 1,
+                "type": "chat.read",
+                "client_id": "bob-read-1",
+                "payload": {"conversation_id": str(conv.id), "seq": 1},
+            }
+        )
+
+        alice_read_status = await comm1.receive_json_from()
+        assert alice_read_status["type"] == "chat.status"
+        assert alice_read_status["payload"]["delivered_seq"] == 1
+        assert alice_read_status["payload"]["read_seq"] == 1
+
+        await comm1.disconnect()
+        await comm2.disconnect()
+
+    async def test_status_ack_seq_beyond_max_and_non_member_returns_error(self):
+        conv, _ = await database_sync_to_async(get_or_create_dm)(self.user1, self.user2)
+        await database_sync_to_async(send_message)(
+            self.user1, conv.id, "Seed message", "seed-1"
+        )
+
+        token1 = get_token_for_user(self.user1)
+        token_charlie = get_token_for_user(self.user3)
+
+        comm1 = await self.create_authenticated_communicator(token1)
+        comm_charlie = await self.create_authenticated_communicator(token_charlie)
+
+        # 1. Seq beyond max (conv next_seq is 2, max is 1)
+        await comm1.send_json_to(
+            {
+                "v": 1,
+                "type": "chat.delivered",
+                "client_id": "err-beyond",
+                "payload": {"conversation_id": str(conv.id), "seq": 5},
+            }
+        )
+        err = await comm1.receive_json_from()
+        assert err["type"] == "error"
+        assert err["payload"]["code"] == 400
+
+        # 2. Non-member (Charlie)
+        await comm_charlie.send_json_to(
+            {
+                "v": 1,
+                "type": "chat.delivered",
+                "client_id": "err-nonmember",
+                "payload": {"conversation_id": str(conv.id), "seq": 1},
+            }
+        )
+        err2 = await comm_charlie.receive_json_from()
+        assert err2["type"] == "error"
+        assert err2["payload"]["code"] == 403
+
+        await comm1.disconnect()
+        await comm_charlie.disconnect()
+
+    async def test_status_ack_rate_limiting_keeps_connection_open(self):
+        conv, _ = await database_sync_to_async(get_or_create_dm)(self.user1, self.user2)
+        await database_sync_to_async(send_message)(
+            self.user1, conv.id, "Seed message", "seed-rl"
+        )
+        # Pre-set pointer to 1 so the 60 allowed frames are stale and produce 0 output frames
+        await database_sync_to_async(update_membership_pointer)(
+            self.user1, conv.id, "delivered", 1
+        )
+
+        token = get_token_for_user(self.user1)
+        comm = await self.create_authenticated_communicator(token)
+
+        # Send 60 status updates quickly (allowed, no broadcast generated because stale)
+        for i in range(60):
+            await comm.send_json_to(
+                {
+                    "v": 1,
+                    "type": "chat.delivered",
+                    "client_id": f"stat-{i}",
+                    "payload": {"conversation_id": str(conv.id), "seq": 1},
+                }
+            )
+
+        # 61st status update exceeds 60/10s rate limit
+        await comm.send_json_to(
+            {
+                "v": 1,
+                "type": "chat.delivered",
+                "client_id": "stat-over",
+                "payload": {"conversation_id": str(conv.id), "seq": 1},
+            }
+        )
+        err = await comm.receive_json_from(timeout=10)
+        assert err["type"] == "error"
+        assert err["payload"]["code"] == 429
+
+        # Socket still open and functional
         await comm.disconnect()

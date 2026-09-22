@@ -62,3 +62,111 @@
   - ADR 0017: Post-Commit Message Broadcast and Per-User Fanout
 - Tooling & Verification:
   - Interactive manual verification script in `scripts/ws_test.py`.
+
+## Flutter Real-Time Messaging Client (Completed)
+- WebSocket Client (`core/network/websocket_client.dart`):
+  - `web_socket_channel` abstracted behind `WebSocketChannelWrapper` interface for fake injection in tests.
+  - JWT Authorization header passed at handshake. Dead socket detection via 10s timeout and 20s ping interval.
+  - Exponential backoff with 20% jitter and 30s cap via `BackoffStrategy`.
+  - Close code 4401 handling: triggers single-flight `TokenRefresher`, reconnects with new token. Fresh token 4401 or rejected refresh immediately logs out to prevent infinite loop. Network errors continue backoff retries.
+  - "Server waking" banner displayed on handshake timeout, 503 HTTP status, or 3+ consecutive connection failures.
+  - Lifecycle management: socket disconnects on app background and reconnects on app resume. Socket exists strictly while authenticated.
+- Chat Domain & Repositories (`features/chat`):
+  - Hand-written immutable models (`ChatMessage`, `Conversation`, `WsEnvelope`) with `fromJson`/`toJson`/`copyWith`.
+  - `ChatRepository` using exact backend endpoints (`/api/conversations`, `/api/conversations/dm`, `/api/conversations/<id>/messages`, `/api/users/search?username=`).
+- State Management & Outbox:
+  - `ConversationsNotifier`: refetches conversation list on reconnect and on unknown message receive, sorts by latest activity.
+  - `ChatNotifier`:
+    - Optimistic message sending with UUIDv4 `client_id` and in-memory outbox queue.
+    - Ack and echo deduplication handling both arrival orders (`ack` then `echo`, or `echo` then `ack`).
+    - Reconnect outbox flush paced by $\ge 550$ms to respect backend rate limits (< 20 sends / 10s).
+    - 429 rate limit backoff retry during outbox flush.
+    - Gap detection (`seq > highestSeq + 1`) triggering catch-up sync.
+    - Multi-page catch-up (`GET ...?after_seq=...&limit=100`) looping until short page (< 100), with live event buffering.
+    - Older-message pagination on scroll-to-top with 30-message short page limit.
+    - State and outbox wiped on logout.
+- UI & Theming:
+  - Strictly theme tokens used throughout (`AppColors`, `AppSpacing`, `AppRadii`, `AppTypography`).
+  - Chat list screen with contact name, latest message preview, relative/local timestamps, logout button, and user search dialog (debounce + min 2 characters).
+  - Chat detail screen with message bubbles (own vs other), delivery status indicator, retry button on error, auto-scroll to bottom only when already near bottom, and message input field (trim, max 4000).
+- Testing:
+  - 41 automated tests in full Flutter test suite (100% pass rate).
+  - 0 analyzer warnings (`flutter analyze`), 100% clean formatting (`dart format`).
+- ADRs:
+  - ADR 0018: WebSocket Client Lifecycle, Reconnection, and Auth Handling
+  - ADR 0019: In-Memory Outbox, Deduplication, and Multi-Page Catch-Up
+
+## Message Delivery and Read Receipts (Ticks) (Completed)
+- Backend (`apps/chat`):
+  - Monotonic per-member pointers in `Membership`: `last_delivered_seq` and `last_read_seq`.
+  - Conditional forward-only SQL updates without read-then-write:
+    - Delivered: `UPDATE chat_membership SET last_delivered_seq = %(seq)s WHERE last_delivered_seq < %(seq)s`.
+    - Read: `UPDATE chat_membership SET last_read_seq = %(seq)s, last_delivered_seq = GREATEST(last_delivered_seq, %(seq)s) WHERE last_read_seq < %(seq)s`.
+  - Silent ignore on stale or redundant acks (0 rows updated produces no broadcast and no error).
+  - Validates `seq` bounds: rejects `seq <= 0` or `seq > next_seq - 1` with 400 error event.
+  - Rejects non-members with 403 error event.
+  - Dedicated rate limit for status acks (60 acks / 10s per connection).
+  - On update, broadcasts `chat.status` via `transaction.on_commit` to each conversation member's `user_{id}` group; catches and logs channel layer failures.
+  - REST API: returns `memberships`, `other_delivered_seq`, `other_read_seq` in `/api/conversations` and `/api/conversations/dm` without N+1 queries.
+- Flutter Client (`app`):
+  - Delivered Acks:
+    - Managed by `ConversationsNotifier` whenever connected, independent of whether chat screen is open.
+    - Highest received seq from any incoming `chat.receive` is debounced (~300ms) and sent as `chat.delivered`.
+    - On reconnect, for non-viewed conversations with unread incoming messages (`last_seq > my_delivered_seq`), automatically sends `chat.delivered` for `last_seq` without fetching messages.
+    - Never acknowledges own messages.
+  - Read Acks:
+    - Managed strictly by open `ChatScreen` / `ChatNotifier`.
+    - Sent only when screen is open, foregrounded, and scrolled near bottom (newest message visible).
+    - Triggered on initial load, scroll-to-bottom, incoming message, and app lifecycle resume.
+    - Debounced ~300ms.
+    - Tracking "last read ack sent" reset to `myReadSeq` from REST payload on reconnect.
+  - Monotonic Merge:
+    - Client pointers merge using `max(current, incoming)` for REST hydration and live `chat.status` events; pointers never decrease.
+  - Visual Indicators (Ticks):
+    - Outgoing messages only (`isMe == true`):
+      - **Pending**: Clock icon (`Icons.access_time_rounded`, `AppColors.outline`).
+      - **Sent**: Single tick (`Icons.check_rounded`, `AppColors.outline`).
+      - **Delivered**: Double tick (`Icons.done_all_rounded`, `AppColors.outline`).
+      - **Read**: Double tick (`Icons.done_all_rounded`, `AppColors.primary`) inside a filled container (`AppColors.primaryContainer`) for distinct visual differentiation beyond color.
+      - **Failed**: Error text + Retry button.
+- ADRs:
+  - ADR 0020: Conditional Monotonic Pointer Updates
+  - ADR 0021: Read-Delivered Invariant and Client Tick Derivation
+
+## Group Chats (Backend Completed)
+- Backend (`apps/chat`):
+  - Database schema & constraints:
+    - `Conversation`: `name` (1-50 chars trimmed), `CheckConstraint` ensuring group conversations have `name` and DM conversations have `dm_key`.
+    - `Membership`: `joined_at_seq` initialized before `"added"` system message; `role` (`admin` or `member`).
+    - `Message`: `is_system` (controlled strictly by server), `system_data` (JSON structured metadata with `kind`, `actor_id`, `target_ids`).
+    - Sender display name and avatar seed included in all message payloads (REST and WS) so ex-members' messages render properly without runtime membership lookups.
+  - Group Services:
+    - Atomic group creation (`create_group`) with creator as admin, initial `group_created` system message, and group size cap enforcement (`GROUP_SIZE_CAP` default 20).
+    - Membership management (`add_group_members`, `remove_group_member`, `leave_group`, `change_member_role`).
+    - Admin-removes-admin allowed; demoting the last admin or sole admin leaving without promoting a successor is rejected (400).
+    - When the last member leaves, empty group conversation is deleted in the same transaction.
+    - `joined_at_seq` bounds message history: queries and pagination (`before_seq`, `after_seq`) clamp at `joined_at_seq`.
+    - Typing indicator (`broadcast_typing`) broadcast to all current members of the conversation.
+  - REST API & Throttling:
+    - `POST /api/conversations/group`: Group creation with duplicate username deduplication and validation.
+    - `GET /api/conversations/<id>`: Group detail with members (id, username, display_name, avatar_seed, role, pointers, is_online). Never exposes email.
+    - `PATCH /api/conversations/<id>`: Rename group (admin-only, trimmed 1-50 chars).
+    - `POST /api/conversations/<id>/members`: Add members (admin-only, cap enforced).
+    - `DELETE /api/conversations/<id>/members/<user_id>`: Remove member (admin-only).
+    - `PATCH /api/conversations/<id>/members/<user_id>/role`: Promote/demote member (admin-only).
+    - `POST /api/conversations/<id>/leave`: Leave group.
+    - `GET /api/users/presence`: Presence endpoint scoped strictly to users sharing at least one conversation.
+    - Throttles: `group_create` (10/min), `group_membership` (30/min), `group_rename` (10/min).
+    - Flat query count invariant: group list queries remain strictly flat with Subqueries and prefetches.
+  - WebSocket Protocol:
+    - Events: `membership.added`, `membership.removed`, `membership.updated`, `conversation.updated`.
+    - Recipient fanout computed inside transaction or pre-dispatch to prevent leakage to ex-members.
+    - Sends after removal are rejected with 403 error events on open sockets.
+  - ADRs:
+    - ADR 0022: Group Last Admin Rule and Empty Group Deletion
+    - ADR 0023: History Visibility for New Group Members and Join Point Assignment
+    - ADR 0024: Fanout Access Control and Open Socket Safety
+    - ADR 0025: System Messages with Structured Data and Server Authority
+    - ADR 0026: Admin Permissions, Role Changes, and Admin-Removes-Admin Rules
+
+

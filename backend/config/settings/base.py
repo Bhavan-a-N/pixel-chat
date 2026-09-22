@@ -108,9 +108,14 @@ REST_FRAMEWORK = {
         "login": os.getenv("THROTTLE_LOGIN", "5/min"),
         "register": os.getenv("THROTTLE_REGISTER", "3/min"),
         "search": os.getenv("THROTTLE_SEARCH", "30/min"),
+        "group_create": os.getenv("THROTTLE_GROUP_CREATE", "10/min"),
+        "group_membership": os.getenv("THROTTLE_GROUP_MEMBERSHIP", "30/min"),
+        "group_rename": os.getenv("THROTTLE_GROUP_RENAME", "10/min"),
     },
     "EXCEPTION_HANDLER": "apps.accounts.exceptions.custom_exception_handler",
 }
+
+GROUP_SIZE_CAP = int(os.getenv("GROUP_SIZE_CAP", "20"))
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
