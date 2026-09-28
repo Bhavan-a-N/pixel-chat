@@ -404,4 +404,3 @@ class TestGroupServices:
         seqs = list(conv.messages.order_by("seq").values_list("seq", flat=True))
         assert seqs == list(range(1, len(seqs) + 1))
         assert conv.next_seq == len(seqs) + 1
-

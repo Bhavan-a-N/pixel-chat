@@ -71,6 +71,7 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         # the test database.  In production this is a no-op for connections
         # that haven't exceeded CONN_MAX_AGE.
         from django.db import close_old_connections
+
         await database_sync_to_async(close_old_connections)()
 
     async def receive(self, text_data=None, bytes_data=None):

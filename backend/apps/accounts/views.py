@@ -1,9 +1,10 @@
-from django.db import connection
 from rest_framework import generics, status, views, permissions
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
+
+from config.health import check_database, check_redis
 
 from .serializers import RegisterSerializer, UserSerializer
 
@@ -68,19 +69,35 @@ class UserSearchView(generics.ListAPIView):
         )
 
 
-class HealthCheckView(views.APIView):
+class HealthLiveView(views.APIView):
+    """Liveness: no DB/Redis I/O (safe for Render health checks and keep-warm pings)."""
+
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                row = cursor.fetchone()
-                if row and row[0] == 1:
-                    return Response({"status": "ok"})
-        except Exception:
-            pass
+        return Response({"status": "live"})
+
+
+class HealthReadyView(views.APIView):
+    """Readiness: Postgres + Redis must respond."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        db_ok = check_database()
+        redis_ok = check_redis()
+        if db_ok and redis_ok:
+            return Response({"status": "ready"})
+        errors = []
+        if not db_ok:
+            errors.append("database_unavailable")
+        if not redis_ok:
+            errors.append("redis_unavailable")
         return Response(
-            {"status": "error", "message": "Database unavailable"},
+            {"status": "error", "errors": errors},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
+
+
+class HealthCheckView(HealthReadyView):
+    """Backward-compatible alias for readiness."""

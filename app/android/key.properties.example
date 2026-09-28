@@ -1,0 +1,7 @@
+# Copy to key.properties (gitignored). Do not commit.
+# storeFile: absolute path to your upload keystore OUTSIDE the repo, e.g.:
+#   D:/pixel-chat-keys/upload-keystore.jks
+storePassword=your-store-password
+keyPassword=your-key-password
+keyAlias=upload
+storeFile=D:/pixel-chat-keys/upload-keystore.jks

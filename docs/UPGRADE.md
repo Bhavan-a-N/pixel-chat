@@ -1,46 +1,61 @@
 # Production Upgrade Guide
 
-This document describes what needs to be changed when upgrading the infrastructure from the current free-tier setup to a paid, production-ready environment. The application is designed such that moving to a paid database or larger host is a configuration change, not a code change.
+Moving from the current **free** stack (Render web + Neon Postgres + Render Key Value) to paid production is **configuration and dashboard changes**, not application rewrites.
+
+## Current free topology
+
+| Piece | Free tier | Limitation |
+|-------|-----------|------------|
+| Render web | 512 MB, 0.1 CPU | Spins down after 15 min idle; ~1 min wake |
+| Neon Postgres | 0.5 GB / project | Scale-to-zero after ~5 min idle; 100 CU-hours/month |
+| Render Key Value | ~25 MB RAM | No persistence; restarts wipe Redis |
 
 ## 1. Database (PostgreSQL)
-- **Change:** Migrate from the free-tier Postgres to a managed, paid database instance with automated backups, high availability (HA), and point-in-time recovery.
-- **Config:** Update the `DATABASE_URL` environment variable to point to the new managed database. No code changes are required.
+
+**Upgrade when:** approaching 0.5 GB, need PITR/backups, or tired of Neon suspend latency.
+
+1. Create Neon **Launch/Scale** (or another provider: RDS, Render paid Postgres).
+2. `pg_dump` from current Neon (see `scripts/backup-db.ps1`).
+3. Restore to new instance.
+4. Update Render `DATABASE_URL` to the new **pooled** URL.
+5. Redeploy web service.
 
 ## 2. Redis
-- **Change:** Upgrade to a paid Redis instance with higher connection limits and persistence, ensuring WebSocket connections don't drop during peak loads.
-- **Config:** Update the `REDIS_URL` environment variable.
 
-## 3. Host Size & Scaling
-- **Change:** Upgrade the application host to a paid tier to eliminate idle-sleep (cold starts) and allocate more CPU/RAM. Scale the stateless ASGI workers horizontally by increasing the instance count.
-- **Config:** Update scaling settings in the hosting provider's dashboard or configuration file (e.g., `render.yaml` or `fly.toml`).
+**Upgrade when:** connection limits, need persistence, or larger channel volume.
 
-## 4. Monitoring & Alerting
-- **Change:** Implement proper application performance monitoring (APM) (e.g., Sentry) and set up alerts for database usage, error rates, and latency.
+1. Create Render **paid** Key Value (persistence enabled) or managed Redis elsewhere.
+2. Update `REDIS_URL` on Render.
+3. Redeploy. Clients reconnect; no data loss (messages live in Postgres).
 
-## Simple pg_dump Backup Script
+## 3. Application host
 
-While managed databases usually include backups, you can use this simple script to perform manual backups.
+**Upgrade when:** eliminate spin-down, need more RAM/CPU, or 750 free hours exhausted.
 
-```bash
-#!/usr/bin/env bash
-# backup_db.sh
+1. Render web service → change plan from **Free** to **Starter** (or higher).
+2. Same Docker image and env vars; no code change.
+3. Optional: increase workers by scaling instance count on paid tiers.
 
-# Requirements: pg_dump installed, DATABASE_URL set in environment
-if [ -z "$DATABASE_URL" ]; then
-  echo "Error: DATABASE_URL is not set."
-  exit 1
-fi
+## 4. Monitoring
 
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_FILE="backup_${TIMESTAMP}.sql"
+- Add Sentry or similar via env (future).
+- Alert on `/health/ready` from an **external** monitor (low frequency) — not on every minute if still on Neon free.
 
-echo "Starting database backup to ${BACKUP_FILE}..."
-pg_dump $DATABASE_URL -F p -f $BACKUP_FILE
+## 5. Backup script
 
-if [ $? -eq 0 ]; then
-  echo "Backup completed successfully."
-else
-  echo "Backup failed!"
-  exit 1
-fi
+Local scheduled backup (PowerShell):
+
+```powershell
+$env:DATABASE_URL = "<neon-url>"
+.\scripts\backup-db.ps1
 ```
+
+See `docs/DEPLOY.md` for Task Scheduler steps and restore with `psql -f`.
+
+## Cost reference after upgrade (indicative)
+
+- Render Starter web: fixed monthly + no spin-down
+- Neon Launch: usage-based storage/compute
+- Render Key Value Starter: fixed monthly with persistence
+
+Update `docs/COST.md` when you move to paid tiers.

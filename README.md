@@ -181,4 +181,25 @@ Groups allow multi-user conversations with administrative roles, system event au
 8. `bob` removes `charlie`. `charlie`'s chat immediately indicates they have been removed, queued messages in outbox are discarded, and no further group events are received.
 9. When `alice` and `bob` leave the group, the conversation and messages are automatically cleaned up.
 
+---
+
+## Deploy and install (production)
+
+Backend deployment (Render + Neon + Render Key Value, Singapore regions) is documented step-by-step in [docs/DEPLOY.md](docs/DEPLOY.md). Android release signing and APK build: [docs/ANDROID_SIGNING.md](docs/ANDROID_SIGNING.md).
+
+### Install the release APK on a friend's phone
+
+1. Copy `app-release.apk` to the phone (USB, cloud link, etc.).
+2. On the phone, open the APK. Android may block installs from unknown sources.
+3. **Android 8+:** allow **Install unknown apps** for the app you use to open the file (Chrome, Files, etc.).
+4. **Older versions:** enable **Unknown sources** in security settings.
+5. Complete install and open **pixel_chat**.
+6. Sign up with the shared **invite code** (you distribute this privately — it is set as `INVITE_CODE` on Render).
+
+### Free host idle sleep
+
+The Render **free web** tier spins down after about **15 minutes** without inbound HTTP or WebSocket **messages**. The first request after sleep can take **~1 minute**. The app shows **“Connecting…” / server waking** and retries automatically — expect a slower first message after idle, not a broken install.
+
+Neon may also **suspend** the database after a few minutes of no queries; the first API call after that can add a short delay. Do not use `/health/ready` for frequent keep-warm pings (see ADR 0027).
+
 

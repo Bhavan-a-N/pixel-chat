@@ -1,9 +1,11 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
-from unittest.mock import patch
+from django.db.utils import OperationalError
 
 User = get_user_model()
 
@@ -219,15 +221,62 @@ class TestUserSearchAndProfile:
 
 @pytest.mark.django_db
 class TestHealthCheck:
-    def test_health_success(self, api_client):
+    def test_health_live_always_ok(self, api_client):
+        res = api_client.get(reverse("health-live-root"))
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["status"] == "live"
+
+    def test_health_ready_success(self, api_client):
+        res = api_client.get(reverse("health-ready-root"))
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["status"] == "ready"
+
+    def test_health_alias_matches_ready(self, api_client):
         res = api_client.get(reverse("health-root"))
         assert res.status_code == status.HTTP_200_OK
+        assert res.data["status"] == "ready"
 
-    @patch("django.db.connection.cursor")
-    def test_health_db_failure(self, mock_cursor, api_client):
-        mock_cursor.side_effect = Exception("DB Down")
-        res = api_client.get(reverse("health-root"))
+    @patch("apps.accounts.views.check_database")
+    def test_health_ready_db_failure(self, mock_db, api_client):
+        mock_db.return_value = False
+        res = api_client.get(reverse("health-ready-root"))
         assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "database_unavailable" in res.data["errors"]
+
+    @patch("apps.accounts.views.check_redis")
+    def test_health_ready_redis_failure(self, mock_redis, api_client):
+        mock_redis.return_value = False
+        res = api_client.get(reverse("health-ready-root"))
+        assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "redis_unavailable" in res.data["errors"]
+
+    # transaction=True: no wrapping atomic block, so connection.close() fully
+    # drops the connection and the readiness check must reconnect (mirrors
+    # a Neon/PgBouncer dropped connection in production).
+    @pytest.mark.django_db(transaction=True)
+    def test_health_ready_recovers_after_db_connection_closed(self, api_client):
+        from django.db import connection
+
+        connection.ensure_connection()
+        connection.close()
+        res = api_client.get(reverse("health-ready-root"))
+        assert res.status_code == status.HTTP_200_OK
+
+    @patch("config.health.connection")
+    def test_check_database_retries_after_stale_connection(self, mock_conn):
+        from config.health import check_database
+
+        ok_cursor = MagicMock()
+        ok_cursor.__enter__.return_value = ok_cursor
+        ok_cursor.fetchone.return_value = (1,)
+        mock_conn.in_atomic_block = False
+        mock_conn.cursor.side_effect = [
+            OperationalError("server closed the connection unexpectedly"),
+            ok_cursor,
+        ]
+
+        assert check_database() is True
+        assert mock_conn.close.call_count == 1
 
 
 @pytest.mark.django_db

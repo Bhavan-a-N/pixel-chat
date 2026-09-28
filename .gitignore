@@ -48,5 +48,13 @@ Thumbs.db
 
 # Env
 .env
+
+# Android release signing (keystore lives outside repo — see docs/ANDROID_SIGNING.md)
+app/android/key.properties
+*.jks
+*.keystore
 # Redis
 *.rdb
+
+# Database backups (contain user data - never commit)
+backups/

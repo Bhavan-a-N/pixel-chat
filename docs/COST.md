@@ -1,24 +1,32 @@
 # Cost and Service Limits
 
-The infrastructure is currently designed to use 100% free-tier services. No paid services are used today.
+Infrastructure targets **$0** today (Candidate B). No paid services required for ~3 users.
 
-## Storage (Postgres)
-- **Current Users:** ~3
-- **Usage Estimate:** ~1KB/message (including indexes)
-- **Growth Estimate:** ~50-100MB/year at heavy use.
-- **Service Used:** [TBD: e.g., Render Free Tier]
-- **Free Tier Limit:** Typically limits exist on total size (e.g. 500MB - 1GB depending on the provider).
-- **Note:** Retention is currently deferred. Refer to ADR 0001 for the threshold to revisit database size monitoring.
+## Storage (Postgres — Neon free)
 
-## Application Hosting
-- **Service Used:** [TBD: e.g., Render / Fly.io Free Tier]
-- **Free Tier Limit:** Limited hours/month or RAM (e.g., 512MB RAM, spins down on idle).
-- **Note:** Expect cold starts due to idle-sleep behaviors. The app uses stateless ASGI workers and Redis channel layer.
+- **Service:** [Neon](https://neon.tech) free plan, region **ap-southeast-1 (Singapore)**.
+- **Limit:** **0.5 GB** storage per project; **100 CU-hours** compute per project per month; scale-to-zero after ~5 min idle.
+- **Users:** ~3
+- **Usage estimate:** ~1 KB/message (indexes included) → ~50–100 MB/year at heavy use.
+- **Retention:** deferred (ADR 0001); revisit near ~70% of tier capacity.
 
-## Redis (Channels)
-- **Service Used:** [TBD: e.g., Upstash / Render Free Tier]
-- **Free Tier Limit:** Limited requests per day or max connections (e.g., Upstash allows 10,000 req/day on free tier).
+## Application hosting (Render free web)
+
+- **Service:** Render web service (Docker, Daphne), region **Singapore**.
+- **Limit:** 512 MB RAM, 0.1 CPU; **750 instance hours/month**; spins down after **15 min** idle (HTTP or WS messages reset timer); ~**1 min** cold start.
+- **Health check:** `/health/live` only (does not query Neon).
+
+## Redis (Render Key Value free)
+
+- **Service:** Render Key Value, region **Singapore** (same as web).
+- **Limit:** ~**25 MB** RAM, **in-memory** (data lost on restart); ephemeral Channels + presence only.
+- **Note:** Not used for durable data.
 
 ## CI/CD
-- **Service Used:** GitHub Actions
-- **Free Tier Limit:** 2,000 CI/CD minutes per month (free for public/private repos).
+
+- **Service:** GitHub Actions
+- **Limit:** 2,000 minutes/month (private repos); current usage: backend + Flutter workflows per push.
+
+## External services (not in use yet)
+
+- **FCM:** not configured in v1 deploy scope.

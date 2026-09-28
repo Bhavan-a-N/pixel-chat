@@ -448,12 +448,18 @@ class TestGroupRestApi:
         assert res_remove.status_code == status.HTTP_204_NO_CONTENT
 
         # 4. Alice sends messages while Bob is removed (seq 5, 6)
-        send_message(self.alice, conv.id, "Secret message while Bob away 1", "c-alice-away-1")
-        send_message(self.alice, conv.id, "Secret message while Bob away 2", "c-alice-away-2")
+        send_message(
+            self.alice, conv.id, "Secret message while Bob away 1", "c-alice-away-1"
+        )
+        send_message(
+            self.alice, conv.id, "Secret message while Bob away 2", "c-alice-away-2"
+        )
 
         # 5. Alice re-adds Bob (Bob joined_at_seq is 6, seq 7 is member_added system msg)
         add_url = reverse("conversation-members", kwargs={"conversation_id": conv.id})
-        res_add = self.client_alice.post(add_url, {"members": [self.bob.username]}, format="json")
+        res_add = self.client_alice.post(
+            add_url, {"members": [self.bob.username]}, format="json"
+        )
         assert res_add.status_code == status.HTTP_200_OK
 
         bob_m = Membership.objects.get(conversation=conv, user=self.bob)
@@ -490,4 +496,3 @@ class TestGroupRestApi:
         res_before = self.client_bob.get(messages_url, {"before_seq": 7})
         assert res_before.status_code == status.HTTP_200_OK
         assert len(res_before.data) == 0
-

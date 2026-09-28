@@ -125,7 +125,9 @@ def send_message(
     with transaction.atomic():
         # Lock conversation for seq assignment and serialization
         try:
-            conversation = Conversation.objects.select_for_update().get(id=conversation_id)
+            conversation = Conversation.objects.select_for_update().get(
+                id=conversation_id
+            )
         except Conversation.DoesNotExist:
             raise PermissionDenied("You are not a member of this conversation.")
 
