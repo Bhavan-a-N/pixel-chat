@@ -36,8 +36,11 @@ RUN apt-get update \
 COPY --from=builder /opt/venv /opt/venv
 COPY --chown=app:app . .
 
+# Make the entrypoint executable (git may not preserve the bit on Windows).
+USER root
+RUN chmod +x /app/entrypoint.sh
 USER app
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "daphne -b 0.0.0.0 -p ${PORT:-8000} config.asgi:application"]
+ENTRYPOINT ["/app/entrypoint.sh"]

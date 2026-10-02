@@ -10,7 +10,8 @@ services:
     rootDir: backend
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health/live
-    preDeployCommand: python scripts/pre_deploy_migrate.py
+    # preDeployCommand removed: Render free tier does not support it.
+    # Migrations run automatically via entrypoint.sh on every container start.
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod
