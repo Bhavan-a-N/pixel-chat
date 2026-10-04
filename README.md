@@ -203,3 +203,14 @@ The Render **free web** tier spins down after about **15 minutes** without inbou
 Neon may also **suspend** the database after a few minutes of no queries; the first API call after that can add a short delay. Do not use `/health/ready` for frequent keep-warm pings (see ADR 0027).
 
 
+
+### Database Backups (Neon PostgreSQL)
+
+A backup script is provided at scripts/backup-db.ps1.
+It uses pg_dump to export the Neon database to .sql files.
+
+**How to Schedule Daily Backups:**
+1. Install PostgreSQL client tools (so pg_dump is on your PATH).
+2. Set DATABASE_URL as a User or System environment variable matching your Neon production connection string.
+3. The task is configured in Windows Task Scheduler under the name **PixelChatBackup** to run daily at 3:00 AM, executing the script.
+4. Backups are saved locally to D:\pixel-chat\backups\ by default (override with PIXEL_CHAT_BACKUP_DIR env var).
