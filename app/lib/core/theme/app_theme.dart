@@ -79,7 +79,7 @@ class AppRadii {
 class AppTypography {
   const AppTypography._();
 
-  static const String _displayFont = 'Comic Sans MS';
+  static const String _displayFont = 'Baloo2';
   static const String _bodyFont = 'sans-serif';
 
   static const TextStyle headlineLarge = TextStyle(
