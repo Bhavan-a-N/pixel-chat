@@ -209,7 +209,7 @@ class ChatListScreen extends ConsumerWidget {
                             vertical: AppSpacing.xs,
                           ),
                           leading: PixelAvatar(
-                            seed: conv.isGroup ? conv.id : (partner?.id ?? conv.id),
+                            seed: conv.isGroup ? conv.id : (partner?.avatarSeed ?? conv.id),
                             size: AppSpacing.xl, // using an appropriate size (32.0 or 40.0)
                           ),
                           title: Row(
@@ -354,7 +354,7 @@ class _UserSearchDialogState extends ConsumerState<_UserSearchDialog> {
                     return ListTile(
                       key: Key('search_result_user_${user.username}'),
                       leading: PixelAvatar(
-                        seed: user.id,
+                        seed: user.avatarSeed,
                         size: AppSpacing.xl,
                       ),
                       title: Text(

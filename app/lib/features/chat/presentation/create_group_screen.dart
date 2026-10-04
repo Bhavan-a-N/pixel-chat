@@ -191,7 +191,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                     return Chip(
                       key: Key('selected_user_chip_${user.id}'),
                       avatar: PixelAvatar(
-                        seed: user.id,
+                        seed: user.avatarSeed,
                         size: 24.0,
                       ),
                       label: Text(
@@ -252,7 +252,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                             return ListTile(
                               key: Key('search_user_tile_${user.id}'),
                               leading: PixelAvatar(
-                                seed: user.id,
+                                seed: user.avatarSeed,
                                 size: AppSpacing.xl,
                               ),
                               title: Text(

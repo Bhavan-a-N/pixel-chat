@@ -16,3 +16,6 @@ Accepted.
 - No external asset files (PNG/SVG) need to be managed for avatars.
 - Pixel-perfect rendering is guaranteed across all device DPIs.
 - Hashing logic handles all color and shape diversity deterministically.
+
+### Group Avatars
+For group avatars, conv.id was intentionally chosen as the seed rather than adding a dedicated vatar_seed field to the Conversation model. Since a conversation's ID is a stable UUID generated at creation and never changes, it perfectly satisfies the requirement for a deterministic, globally stable pixel art avatar for the group. It avoids requiring a database migration to add an vatar_seed column to the conversations table, keeping the implementation lightweight while fulfilling the design system requirements.

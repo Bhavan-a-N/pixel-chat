@@ -251,7 +251,7 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
                     leading: Stack(
                       children: [
                         PixelAvatar(
-                          seed: member.id,
+                          seed: member.avatarSeed,
                           size: 40.0,
                         ),
                         if (member.isOnline)

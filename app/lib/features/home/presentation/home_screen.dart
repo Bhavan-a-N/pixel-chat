@@ -45,7 +45,7 @@ class HomeScreen extends ConsumerWidget {
                   child: Row(
                     children: [
                       PixelAvatar(
-                        seed: user?.id ?? '',
+                        seed: user?.avatarSeed ?? '',
                         size: AppSpacing.lg * 2,
                       ),
                       const SizedBox(width: AppSpacing.md),
