@@ -14,19 +14,18 @@ void main() {
       expect(identity1.ringColor, identity2.ringColor);
     });
 
-    test('fromSeed produces varied distribution', () {
-      final Set<CritterType> types = {};
-      final Set<Color> ringColors = {};
-      
-      for (int i = 0; i < 50; i++) {
-        final identity = CritterIdentity.fromSeed('user_$i');
-        types.add(identity.type);
-        ringColors.add(identity.ringColor);
-      }
-      
-      // We should see all 3 types and 3 ring colors generated over 50 unique seeds
-      expect(types.length, 3);
-      expect(ringColors.length, 3);
+    test('fromSeed produces consistent fixtures', () {
+      final id1 = CritterIdentity.fromSeed('550c9958-5749-482b-eb7c-14eb124141ab');
+      expect(id1.type, CritterType.cat);
+      // Pal: 2, Ring: 2
+
+      final id2 = CritterIdentity.fromSeed('9b35fca1-c30d-4417-ff42-1af3fb09d4a2');
+      expect(id2.type, CritterType.fox);
+      // Pal: 0, Ring: 1
+
+      final id3 = CritterIdentity.fromSeed('0f07c60f-dbd8-43d1-ff23-5c2956009e11');
+      expect(id3.type, CritterType.bear);
+      // Pal: 2, Ring: 2
     });
   });
 

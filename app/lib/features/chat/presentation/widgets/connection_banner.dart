@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/theme/pixel_art.dart';
+import '../../../../core/theme/pixel_assets.dart';
 import '../../../../core/network/websocket_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../application/websocket_provider.dart';
@@ -54,7 +56,7 @@ class ConnectionBanner extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: AppSpacing.md, color: textColor),
+          connectionState == WebSocketConnectionState.serverWaking ? PixelArt(grid: PixelAssets.clock, palette: PixelAssets.clockPalette, size: 16.0) : Icon(icon, size: AppSpacing.md, color: textColor),
           const SizedBox(width: AppSpacing.sm),
           Text(
             message,

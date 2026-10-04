@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../ui/widgets/pixel_avatar.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/domain/user.dart';
@@ -189,17 +190,9 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                   children: _selectedUsers.map((user) {
                     return Chip(
                       key: Key('selected_user_chip_${user.id}'),
-                      avatar: CircleAvatar(
-                        backgroundColor: AppColors.primary,
-                        child: Text(
-                          user.displayName.isNotEmpty
-                              ? user.displayName[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            color: AppColors.onPrimary,
-                            fontSize: 12,
-                          ),
-                        ),
+                      avatar: PixelAvatar(
+                        seed: user.id,
+                        size: 24.0,
                       ),
                       label: Text(
                         user.displayName.isNotEmpty
@@ -258,16 +251,9 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
 
                             return ListTile(
                               key: Key('search_user_tile_${user.id}'),
-                              leading: CircleAvatar(
-                                backgroundColor: AppColors.primaryContainer,
-                                child: Text(
-                                  user.displayName.isNotEmpty
-                                      ? user.displayName[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                    color: AppColors.onPrimaryContainer,
-                                  ),
-                                ),
+                              leading: PixelAvatar(
+                                seed: user.id,
+                                size: AppSpacing.xl,
                               ),
                               title: Text(
                                 user.displayName.isNotEmpty

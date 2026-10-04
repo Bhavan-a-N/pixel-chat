@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../ui/widgets/pixel_avatar.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/application/auth_notifier.dart';
@@ -174,14 +175,9 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
             Center(
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: AppSpacing.xxl,
-                    backgroundColor: AppColors.primaryContainer,
-                    child: const Icon(
-                      Icons.group_rounded,
-                      size: AppSpacing.xxl,
-                      color: AppColors.onPrimaryContainer,
-                    ),
+                  PixelAvatar(
+                    seed: detail.id,
+                    size: AppSpacing.xxl * 2,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Row(
@@ -254,18 +250,9 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
                     key: Key('group_member_tile_${member.id}'),
                     leading: Stack(
                       children: [
-                        CircleAvatar(
-                          backgroundColor: AppColors.primaryContainer,
-                          child: Text(
-                            member.displayName.isNotEmpty
-                                ? member.displayName[0].toUpperCase()
-                                : (member.username.isNotEmpty
-                                      ? member.username[0].toUpperCase()
-                                      : '?'),
-                            style: const TextStyle(
-                              color: AppColors.onPrimaryContainer,
-                            ),
-                          ),
+                        PixelAvatar(
+                          seed: member.id,
+                          size: 40.0,
                         ),
                         if (member.isOnline)
                           Positioned(

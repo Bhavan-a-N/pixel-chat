@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/theme/pixel_art.dart';
+import '../../../../core/theme/pixel_assets.dart';
+import '../../../../ui/widgets/pixel_avatar.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/application/auth_notifier.dart';
@@ -205,22 +208,9 @@ class ChatListScreen extends ConsumerWidget {
                             horizontal: AppSpacing.md,
                             vertical: AppSpacing.xs,
                           ),
-                          leading: CircleAvatar(
-                            radius: AppSpacing.lg,
-                            backgroundColor: conv.isGroup
-                                ? AppColors.surfaceVariant
-                                : AppColors.primaryContainer,
-                            child: conv.isGroup
-                                ? const Icon(
-                                    Icons.groups_rounded,
-                                    color: AppColors.primary,
-                                  )
-                                : Text(
-                                    initial,
-                                    style: AppTypography.titleLarge.copyWith(
-                                      color: AppColors.onPrimaryContainer,
-                                    ),
-                                  ),
+                          leading: PixelAvatar(
+                            seed: conv.isGroup ? conv.id : (partner?.id ?? conv.id),
+                            size: AppSpacing.xl, // using an appropriate size (32.0 or 40.0)
                           ),
                           title: Row(
                             children: [
@@ -363,14 +353,9 @@ class _UserSearchDialogState extends ConsumerState<_UserSearchDialog> {
                     final user = _results[index];
                     return ListTile(
                       key: Key('search_result_user_${user.username}'),
-                      leading: CircleAvatar(
-                        backgroundColor: AppColors.primaryContainer,
-                        child: Text(
-                          user.displayName.isNotEmpty
-                              ? user.displayName[0].toUpperCase()
-                              : user.username[0].toUpperCase(),
-                          style: TextStyle(color: AppColors.onPrimaryContainer),
-                        ),
+                      leading: PixelAvatar(
+                        seed: user.id,
+                        size: AppSpacing.xl,
                       ),
                       title: Text(
                         user.displayName,

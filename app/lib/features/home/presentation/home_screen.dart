@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../ui/widgets/pixel_avatar.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/application/auth_notifier.dart';
 
@@ -43,17 +44,9 @@ class HomeScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(AppSpacing.lg),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: AppSpacing.lg,
-                        backgroundColor: AppColors.primaryContainer,
-                        child: Text(
-                          (user?.displayName.isNotEmpty ?? false)
-                              ? user!.displayName[0].toUpperCase()
-                              : '?',
-                          style: AppTypography.headlineMedium.copyWith(
-                            color: AppColors.onPrimaryContainer,
-                          ),
-                        ),
+                      PixelAvatar(
+                        seed: user?.id ?? '',
+                        size: AppSpacing.lg * 2,
                       ),
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
