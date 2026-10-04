@@ -137,10 +137,10 @@ class ChatListScreen extends ConsumerWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            size: AppSpacing.xxl,
-                            color: AppColors.outline,
+                          PixelArt(
+                            grid: PixelAssets.envelope,
+                            palette: PixelAssets.envelopePalette,
+                            size: 48.0,
                           ),
                           const SizedBox(height: AppSpacing.md),
                           Text(

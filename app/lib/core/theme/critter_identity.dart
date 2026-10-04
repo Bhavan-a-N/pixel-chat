@@ -32,9 +32,9 @@ class CritterIdentity {
     final selectedPalette = _getPalette(type, paletteInt);
 
     final List<Color> ringColors = [
-      AppColors.primaryContainer,
-      AppColors.success,
-      AppColors.primaryContainer,
+      AppColors.butterYellow,
+      AppColors.mintGreen,
+      AppColors.skyBlue,
     ];
     final ringColor = ringColors[ringInt];
 

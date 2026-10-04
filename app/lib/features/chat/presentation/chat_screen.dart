@@ -343,9 +343,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                         Expanded(
                           child: chatState.messages.isEmpty
                               ? Center(
-                                  child: Text(
-                                    'No messages yet. Say hello!',
-                                    style: AppTypography.bodyMedium,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      PixelArt(
+                                        grid: PixelAssets.sparkle,
+                                        palette: PixelAssets.sparklePalette,
+                                        size: 48.0,
+                                      ),
+                                      const SizedBox(height: AppSpacing.md),
+                                      Text(
+                                        'No messages yet. Say hello!',
+                                        style: AppTypography.bodyMedium,
+                                      ),
+                                    ],
                                   ),
                                 )
                               : ListView.builder(
